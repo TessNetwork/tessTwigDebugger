@@ -1,0 +1,22 @@
+{
+  "name": "tessnetwork/twig-debugger",
+  "description": "",
+  "version": "0.1.0",
+  "type": "shopware-platform-plugin",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "TessNetwork\\TwigDebugger\\": "src/"
+    }
+  },
+  "require": {
+    "php": "^7.3 || ^8.0"
+  },
+  "extra": {
+    "shopware-plugin-class": "TessNetwork\\TwigDebugger\\tessTwigDebugger",
+    "label": {
+      "en-GB": "Twig Debugger",
+      "de-DE": "Twig Debugger"
+    }
+  }
+}

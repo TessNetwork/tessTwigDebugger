@@ -1,0 +1,93 @@
+name: shopware6
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        options: --name mysql
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_DATABASE: shopware
+          MYSQL_ROOT_PASSWORD: shopware
+          MYSQL_USER: shopware
+          MYSQL_PASSWORD: shopware
+          MYSQL_HOST: 127.0.0.1
+      shopware:
+        image: ghcr.io/simonprinz/shopwarepacker6:latest
+        options: --name shopware -v "${{ github.workspace }}:/shopware/custom/plugins/${{ github.event.repository.name }}"
+        env:
+          MYSQL_DATABASE: shopware
+          MYSQL_USER: shopware
+          MYSQL_PASSWORD: shopware
+          MYSQL_HOST: mysql
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Set dynamic environment variables
+        run: echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+      - name: Check Shopware docker logs
+        uses: docker://docker
+        with:
+          args: docker logs shopware
+      - name: Restart shopware container
+        uses: docker://docker
+        with:
+          args: docker restart shopware
+      - name: Determine Composer cache directory
+        shell: bash
+        run: "echo \"COMPOSER_CACHE_DIR=$(composer config cache-dir)\" >> $GITHUB_ENV"
+      - name: Cache dependencies installed with Composer
+        uses: actions/cache@v2
+        with:
+          path: "${{ env.COMPOSER_CACHE_DIR }}"
+          key: os-${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            os-${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+      - name: Setup PHP with composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          tools: composer:v2
+      - name: Run composer install
+        run: composer install
+      - name: Refresh plugin list
+        uses: docker://docker
+        with:
+          args: docker exec shopware /bin/bash -c "/shopware/bin/console plugin:refresh"
+      - name: Install the plugin
+        uses: docker://docker
+        with:
+          args: docker exec shopware /bin/bash -c "/shopware/bin/console plugin:install ${{ env.REPOSITORY_NAME }}"
+      - name: Activate the plugin and clear cache
+        uses: docker://docker
+        with:
+          args: docker exec shopware /bin/bash -c "/shopware/bin/console -c plugin:activate ${{ env.REPOSITORY_NAME}}"
+      - name: Build the storefront and administration
+        uses: docker://docker
+        with:
+          args: docker exec shopware /bin/bash -c "/shopware/bin/build-js.sh"
+      - name: Zip the plugin
+        run: |
+          rm -rf .git*
+          mkdir ".$REPOSITORY_NAME"
+          mv * ".$REPOSITORY_NAME/"
+          mv ".$REPOSITORY_NAME" $REPOSITORY_NAME
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ env.REPOSITORY_NAME }}
+          path: "*"
